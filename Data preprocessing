@@ -1,0 +1,52 @@
+
+# ============================================================
+# MODULE 3: DATA PREPROCESSING
+# ============================================================
+
+# Add Year column
+clean["Year"] = clean["Date_reported"].dt.year
+
+# Select the three focus regions
+regions = ["SEAR", "EUR", "WPR"]
+
+reg = clean[clean["WHO_region"].isin(regions)].copy()
+
+# Sort by Region, Country, and Date
+reg = reg.sort_values(
+    by=["WHO_region", "Country", "Date_reported"]
+).reset_index(drop=True)
+
+# Check regional dataset shape
+print("Regional dataset shape:")
+print(reg.shape)
+
+# Number of countries
+print("\nNumber of countries:")
+print(reg["Country"].nunique())
+
+# Countries in each region
+print("\nCountries in each region:")
+print(reg.groupby("WHO_region")["Country"].nunique())
+
+# Check earliest and latest dates
+print("\nEarliest date:")
+print(reg["Date_reported"].min().strftime("%d-%m-%Y"))
+
+print("\nLatest date:")
+print(reg["Date_reported"].max().strftime("%d-%m-%Y"))
+
+# Years available
+print("\nYears available:")
+print(sorted(reg["Year"].dropna().unique()))
+
+# Save the regional dataset
+file_name = "WHO-COVID-19-regional-cleaned.csv"
+
+reg.to_csv(
+    file_name,
+    index=False,
+    date_format="%Y-%m-%d"
+)
+
+print(f"\nDataset successfully saved as '{file_name}'!")
+
