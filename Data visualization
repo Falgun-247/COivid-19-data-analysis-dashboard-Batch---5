@@ -1,0 +1,233 @@
+# ============================================================
+# MODULE 5: DATA VISULAIZATION
+# ============================================================
+
+#Setup for Graphs
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
+from matplotlib.patches import Patch
+
+# ---------- 1. Load the regional cleaned dataset ----------
+# Upload WHO-COVID-19-regional-cleaned.csv to /content first
+reg = pd.read_csv("/content/WHO-COVID-19-regional-cleaned.csv",
+                  keep_default_na=False, na_values=[""])
+
+# ---------- 2. Make Date_reported a real date (handles YYYY-MM-DD and DD-MM-YYYY) ----------
+d = pd.to_datetime(reg["Date_reported"].astype(str), format="%Y-%m-%d", errors="coerce")
+if d.isna().any():
+    d = pd.to_datetime(reg["Date_reported"].astype(str), format="%d-%m-%Y", errors="coerce")
+reg["Date_reported"] = d
+reg["Year"] = reg["Date_reported"].dt.year
+reg["Month"] = reg["Date_reported"].dt.to_period("M").dt.to_timestamp()   # first day of month
+
+reg = reg.sort_values(["WHO_region", "Country", "Date_reported"]).reset_index(drop=True)
+
+print("Shape:", reg.shape)
+print("Date type:", reg["Date_reported"].dtype)
+print("Invalid dates:", reg["Date_reported"].isna().sum())
+
+# ---------- 3. Region names and colours (same as dashboard) ----------
+region_names = {"SEAR": "South-East Asia", "EUR": "Europe", "WPR": "Western Pacific"}
+colors = {"SEAR": "#D9A93F", "EUR": "#3FC9B8", "WPR": "#9B8CE0"}
+regions = ["SEAR", "EUR", "WPR"]
+
+# ---------- 4. Latest cumulative row for every country ----------
+latest = reg.groupby(["WHO_region", "Country"], group_keys=False).tail(1)
+
+# ---------- 5. Dark theme ----------
+plt.rcParams.update({
+    "figure.facecolor": "#1c1f23", "axes.facecolor": "#1c1f23",
+    "savefig.facecolor": "#1c1f23", "axes.edgecolor": "#3a3f45",
+    "axes.labelcolor": "#b5bac1", "xtick.color": "#b5bac1",
+    "ytick.color": "#b5bac1", "text.color": "#e6e6e6",
+    "axes.grid": True, "grid.color": "#2c3036", "grid.linewidth": 0.8
+})
+
+#Graph 1: Line graph (dual axis): New cases & deaths
+
+
+# Monthly totals across the three regions
+monthly = reg.groupby("Month")[["New_cases", "New_deaths"]].sum()
+
+fig, ax1 = plt.subplots(figsize=(11, 4.5))
+l1, = ax1.plot(monthly.index, monthly["New_cases"] / 1e6, color="#3FC9B8", linewidth=2, label="New cases")
+ax1.set_ylabel("New cases (millions)")
+ax1.yaxis.set_major_formatter(mtick.FormatStrFormatter("%.0fM"))
+
+ax2 = ax1.twinx()
+l2, = ax2.plot(monthly.index, monthly["New_deaths"] / 1e3, color="#E8805F", linewidth=2, label="New deaths")
+ax2.set_ylabel("New deaths (thousands)")
+ax2.yaxis.set_major_formatter(mtick.FormatStrFormatter("%.0fK"))
+ax2.grid(False)
+
+ax1.legend([l1, l2], ["New cases", "New deaths"], loc="upper right", frameon=False)
+plt.title("New cases & deaths: reported per month", loc="left", fontsize=13)
+plt.tight_layout()
+plt.show()
+
+#Graph 2: Area/line graph (dual axis): Cumulative growth
+
+# Add up the running totals of all countries on each date, then take the last value of each month
+daily_cum = reg.groupby("Date_reported")[["Cumulative_cases", "Cumulative_deaths"]].sum().reset_index()
+daily_cum["Month"] = daily_cum["Date_reported"].dt.to_period("M").dt.to_timestamp()
+cum = daily_cum.groupby("Month")[["Cumulative_cases", "Cumulative_deaths"]].last()
+
+fig, ax1 = plt.subplots(figsize=(11, 4.5))
+l1, = ax1.plot(cum.index, cum["Cumulative_cases"] / 1e6, color="#3FC9B8", linewidth=2, label="Cumulative cases")
+ax1.fill_between(cum.index, cum["Cumulative_cases"] / 1e6, color="#3FC9B8", alpha=0.15)
+ax1.set_ylabel("Cumulative cases (millions)")
+ax1.yaxis.set_major_formatter(mtick.FormatStrFormatter("%.0fM"))
+
+ax2 = ax1.twinx()
+l2, = ax2.plot(cum.index, cum["Cumulative_deaths"] / 1e6, color="#E8805F", linewidth=2, label="Cumulative deaths")
+ax2.set_ylabel("Cumulative deaths (millions)")
+ax2.grid(False)
+
+ax1.legend([l1, l2], ["Cumulative cases", "Cumulative deaths"], loc="center right", frameon=False)
+plt.title("Cumulative growth: running total", loc="left", fontsize=13)
+plt.tight_layout()
+plt.show()
+
+#Graph 3: Grouped bar graph (vertical): New cases by year
+
+
+yearly = reg.groupby(["Year", "WHO_region"])["New_cases"].sum().unstack()[regions] / 1e6
+
+x = np.arange(len(yearly.index))
+w = 0.25
+
+fig, ax = plt.subplots(figsize=(8, 4.5))
+for i, r in enumerate(regions):
+    ax.bar(x + (i - 1) * w, yearly[r].values, width=w, color=colors[r], label=r)
+
+ax.set_xticks(x)
+ax.set_xticklabels(yearly.index.astype(str))
+ax.set_ylabel("New cases (millions)")
+ax.yaxis.set_major_formatter(mtick.FormatStrFormatter("%.0fM"))
+ax.set_axisbelow(True)
+ax.legend(frameon=False)
+plt.title("New cases by year (millions, per region)", loc="left", fontsize=13)
+plt.tight_layout()
+plt.show()
+
+#Graph 4: Horizontal bar graph: Case-fatality rate by region
+
+
+g = latest.groupby("WHO_region")[["Cumulative_cases", "Cumulative_deaths"]].sum()
+g["CFR"] = g["Cumulative_deaths"] / g["Cumulative_cases"] * 100
+g = g.loc[regions]
+
+fig, ax = plt.subplots(figsize=(7, 3.5))
+ax.barh([region_names[r] for r in g.index], g["CFR"].values,
+        color=[colors[r] for r in g.index], height=0.6)
+ax.invert_yaxis()
+ax.set_axisbelow(True)
+ax.xaxis.set_major_formatter(mtick.PercentFormatter(decimals=1))
+ax.grid(axis="y", visible=False)
+
+for i, v in enumerate(g["CFR"].values):
+    ax.text(v + 0.02, i, f"{v:.2f}%", va="center")
+
+plt.title("Case-fatality rate (deaths ÷ cases × 100)", loc="left", fontsize=13)
+plt.tight_layout()
+plt.show()
+
+#Graph 5: Donut chart: Share of 3-region cases
+
+
+share = latest.groupby("WHO_region")["Cumulative_cases"].sum().loc[regions]
+
+fig, ax = plt.subplots(figsize=(6, 6))
+ax.pie(share.values, colors=[colors[r] for r in share.index],
+       startangle=90, counterclock=False,
+       autopct="%1.1f%%", pctdistance=0.8,
+       textprops={"color": "#1c1f23", "fontsize": 12},
+       wedgeprops=dict(width=0.4, edgecolor="#1c1f23", linewidth=2))
+ax.legend([region_names[r] for r in share.index], loc="lower center",
+          ncol=3, frameon=False, bbox_to_anchor=(0.5, -0.05))
+plt.title("Share of 3-region cases (SEAR + EUR + WPR)", fontsize=13)
+plt.tight_layout()
+plt.show()
+
+#Graph 6: Horizontal bar graph: Top 10 countries by cases
+
+
+top10 = latest.sort_values("Cumulative_cases", ascending=False).head(10)
+
+fig, ax = plt.subplots(figsize=(10, 5))
+ax.barh(top10["Country"].values, top10["Cumulative_cases"].values / 1e6,
+        color=[colors[r] for r in top10["WHO_region"]], height=0.65)
+ax.invert_yaxis()
+ax.set_axisbelow(True)
+ax.set_xlabel("Total cases (millions)")
+ax.grid(axis="y", visible=False)
+
+ax.legend(handles=[Patch(color=colors[r], label=region_names[r]) for r in regions],
+          frameon=False, loc="lower right")
+
+plt.title("Top 10 countries by total cases", loc="left", fontsize=13)
+plt.tight_layout()
+plt.show()
+
+#Graph 7: Scatter (dot) plot, log scale: Cases vs deaths by country
+
+
+# Log scale cannot show zeros, so keep countries with at least 1 case and 1 death
+sc = latest[(latest["Cumulative_cases"] > 0) & (latest["Cumulative_deaths"] > 0)]
+
+fig, ax = plt.subplots(figsize=(8, 6))
+for r in regions:
+    dd = sc[sc["WHO_region"] == r]
+    ax.scatter(dd["Cumulative_cases"], dd["Cumulative_deaths"],
+               color=colors[r], label=region_names[r], s=45, alpha=0.9)
+
+ax.set_xscale("log")
+ax.set_yscale("log")
+ax.set_xlabel("Total cases (log)")
+ax.set_ylabel("Total deaths (log)")
+ax.legend(frameon=False)
+plt.title("Cases vs. deaths, by country (one dot per country)", loc="left", fontsize=13)
+plt.tight_layout()
+plt.show()
+
+# Aggregate latest cumulative totals by region
+g = latest.groupby("WHO_region")[["Cumulative_cases", "Cumulative_deaths"]].sum().loc[regions]
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4.5))
+
+# Left plot: Total Cases (millions)
+bars1 = ax1.bar([region_names[r] for r in g.index],
+                g["Cumulative_cases"] / 1e6,
+                color=[colors[r] for r in g.index], width=0.6)
+ax1.set_title("Total Cases (millions)", fontsize=12, fontweight="bold")
+ax1.set_ylabel("Cases (M)")
+ax1.set_axisbelow(True)
+ax1.spines["top"].set_visible(False)
+ax1.spines["right"].set_visible(False)
+
+# Add value labels on top of bars
+for bar in bars1:
+    yval = bar.get_height()
+    ax1.text(bar.get_x() + bar.get_width()/2.0, yval + 3, f"{yval:.1f}", ha="center", va="bottom", fontsize=10)
+
+# Right plot: Total Deaths (thousands)
+bars2 = ax2.bar([region_names[r] for r in g.index],
+                g["Cumulative_deaths"] / 1e3,
+                color=[colors[r] for r in g.index], width=0.6)
+ax2.set_title("Total Deaths (thousands)", fontsize=12, fontweight="bold")
+ax2.set_ylabel("Deaths (K)")
+ax2.set_axisbelow(True)
+ax2.spines["top"].set_visible(False)
+ax2.spines["right"].set_visible(False)
+
+# Add value labels on top of bars
+for bar in bars2:
+    yval = bar.get_height()
+    ax2.text(bar.get_x() + bar.get_width()/2.0, yval + 50, f"{yval:.1f}", ha="center", va="bottom", fontsize=10)
+
+plt.tight_layout()
+plt.show()
+
