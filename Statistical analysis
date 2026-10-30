@@ -1,0 +1,48 @@
+# ============================================================
+# MODULE 4: STATISTICAL ANALYSIS
+# ============================================================
+
+# Get the latest cumulative totals for each country
+latest = reg.groupby(
+    ["WHO_region", "Country"], group_keys=False
+).tail(1)
+cases = "Cumulative_cases"
+deaths = "Cumulative_deaths"
+
+# Group countries by region
+grouped = latest.groupby("WHO_region")
+
+# 1. Number of countries in each region
+country_count = grouped["Country"].nunique()
+
+# 2. Total cases (in millions) and total deaths
+totals = grouped[[cases, deaths]].sum()
+
+totals["Total_cases_millions"] = totals[cases] / 1_000_000
+
+totals = totals.rename(columns={
+    deaths: "Total_deaths"
+})
+
+# 3. Case Fatality Rate (CFR)
+totals["CFR (%)"] = (
+    totals["Total_deaths"] / totals[cases]
+) * 100
+
+# 4. Mean, median and skewness of cumulative cases
+statistics = grouped[cases].agg(
+    Mean_in_Millions=lambda x: x.mean() / 1_000_000,
+    Median_in_Millions=lambda x: x.median() / 1_000_000,
+    Skewness="skew"
+)
+
+# Combine all statistical results
+result = pd.DataFrame({
+    "Number_of_countries": country_count
+}).join(totals[["Total_cases_millions", "Total_deaths", "CFR (%)"]])
+
+result = result.join(statistics)
+
+# Display results
+print("STATISTICAL ANALYSIS BY REGION")
+print(result.round(2))
