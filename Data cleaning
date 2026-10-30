@@ -1,0 +1,58 @@
+
+# ============================================================
+# MODULE 2: DATA CLEANING
+# ============================================================
+
+# Make a copy of the original dataset
+clean = df.copy()
+
+# CORRECTED: Parse dates using the original DD-MM-YYYY format
+clean["Date_reported"] = pd.to_datetime(
+    clean["Date_reported"],
+    format="%d-%m-%Y",
+    errors="coerce"
+)
+
+# Check whether any dates failed to convert
+print("\nInvalid dates after conversion:")
+print(clean["Date_reported"].isna().sum())
+
+# Remove duplicate rows
+before = len(clean)
+clean = clean.drop_duplicates()
+after = len(clean)
+
+print("\nDuplicate rows removed:", before - after)
+
+# Standardize country names
+clean["Country"] = clean["Country"].str.strip()
+
+# Standardize WHO region names
+clean["WHO_region"] = clean["WHO_region"].str.strip().str.upper()
+
+# Fill missing daily cases and deaths with 0
+clean["New_cases"] = clean["New_cases"].fillna(0)
+clean["New_deaths"] = clean["New_deaths"].fillna(0)
+
+# Replace negative daily values with 0 for daily trend analysis
+clean["New_cases"] = clean["New_cases"].clip(lower=0)
+clean["New_deaths"] = clean["New_deaths"].clip(lower=0)
+
+# Check missing values after cleaning
+print("\nMissing values after cleaning:")
+print(clean.isna().sum())
+
+# Check data types
+print("\nData types after cleaning:")
+print(clean.dtypes)
+
+# Display final shape
+print("\nCleaned dataset shape:")
+print(clean.shape)
+
+# Verify the date range
+print("\nEarliest date:")
+print(clean["Date_reported"].min().strftime("%d-%m-%Y"))
+
+print("\nLatest date:")
+print(clean["Date_reported"].max().strftime("%d-%m-%Y"))
